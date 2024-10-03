@@ -1,0 +1,70 @@
+#Terry Moore
+#v0.1
+#03-10-2024
+
+#Note: The account used to authenticate needs to be added a site collection administrator in the site you are scanning with the below script. Global admin is insufficent.
+
+#Connect-SPOSIte -URL https://tenant-admin.sharepoint.com
+
+Write-Host "Retrieving all SharePoint Online sites..." -ForegroundColor Cyan
+
+# Get all SharePoint sites in the tenant
+$allSites = Get-SPOSite -Limit All
+
+Write-Host "Total number of sites found: $($allSites.Count)" -ForegroundColor Green
+
+# List of users to check
+$users = @("user1@domain.com", "user2@domain.com", "user3@domain.com", "user4@domain.com")
+
+# Prepare an array to store results
+$results = @()
+
+# Loop through each site and check permissions for each user
+foreach ($site in $allSites) {
+    Write-Host "===============================" -ForegroundColor Yellow
+    Write-Host "Checking site: $($site.Url)" -ForegroundColor Cyan
+    Write-Host "Site Storage Quota: $($site.StorageQuota), Current Usage: $($site.StorageUsageCurrent) MB" -ForegroundColor Cyan
+
+    foreach ($user in $users) {
+        Write-Host "Checking permissions for user: $user on site: $($site.Url)" -ForegroundColor DarkCyan
+        try {
+            # Check if the user has permissions on the current site
+            Write-Host "Running Get-SPOUser for user: $user on site: $($site.Url)" -ForegroundColor DarkYellow
+            $permissions = Get-SPOUser -Site $site.Url -LoginName $user
+            
+            if ($permissions) {
+                Write-Host "User $user has permissions on site $($site.Url)" -ForegroundColor Green
+                # If the user has permissions, add the result to the array
+                $results += [PSCustomObject]@{
+                    SiteUrl      = $site.Url
+                    User         = $user
+                    Permission   = "Has Access"
+                    IsSiteAdmin  = $permissions.IsSiteAdmin
+                }
+                Write-Host "Added result: User $user has access, IsSiteAdmin: $($permissions.IsSiteAdmin)" -ForegroundColor Green
+            } else {
+                Write-Host "User $user does not have access to site $($site.Url)" -ForegroundColor Red
+                Write-Host "User $user is not a member of the SharePoint site: $($site.Url)" -ForegroundColor DarkRed
+            }
+        } catch {
+            # Instead of capturing the error details, provide a simplified message
+            Write-Host "User $user is not a member of the SharePoint site: $($site.Url)" -ForegroundColor DarkRed
+            # Capture the simplified error message
+            $results += [PSCustomObject]@{
+                SiteUrl      = $site.Url
+                User         = $user
+                Permission   = "User Not a Member"
+                IsSiteAdmin  = $null
+            }
+        }
+    }
+}
+
+# Define the file path where the CSV report will be saved
+$csvFilePath = "G:\SharePointPermissions.csv"
+
+Write-Host "Exporting results to CSV file: $csvFilePath" -ForegroundColor Yellow
+# Export results to a CSV file
+$results | Export-Csv -Path $csvFilePath -NoTypeInformation -Encoding UTF8
+
+Write-Host "Export complete! File saved to: $csvFilePath" -ForegroundColor Green
